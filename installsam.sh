@@ -6,7 +6,7 @@ set -Eeuo pipefail
 # ---------------------------------------------------------
 if [[ "$USER" == "root" ]]; then
     echo "❌ ERROR: Do NOT run installer with sudo!"
-    echo "   Instead run as normal user:"
+    echo "   Run as normal user:"
     echo "   curl -sSL https://raw.githubusercontent.com/Tam9rat/sam-installer/main/installsam.sh | bash"
     exit 1
 fi
@@ -16,53 +16,53 @@ echo "===  SAM HUB INSTALLER  ==="
 echo ""
 
 # ---------------------------------------------------------
-# AUTO-DETECT DEVICE ID FROM HOSTNAME
+# AUTO-DETECT DEVICE ID
 # ---------------------------------------------------------
 DEVICE_ID="$(hostname)"
-
-if [[ -z "$DEVICE_ID" ]]; then
-    echo " ERROR: hostname is empty. Cannot continue."
-    exit 1
-fi
-
-echo "Detected Device ID from hostname: $DEVICE_ID"
+echo "Detected Device ID: $DEVICE_ID"
 echo ""
 
 RUN_USER="$USER"
 USER_HOME="$HOME"
-SSH_KEY_PATH="${USER_HOME}/.ssh/sam_${DEVICE_ID}"
+
+SSH_KEY_PATH="${USER_HOME}/.ssh/sam"
+BOZO_PUB_PATH="${USER_HOME}/.ssh/bozocloud.pub"
+
 REPO_SSH_URL="git@github.com:Tam9rat/sam.git"
 REPO_DIR="${USER_HOME}/sam"
 SERVICE_FILE="/etc/systemd/system/sam.service"
 
 echo " User: $RUN_USER"
 echo " Installing to: $REPO_DIR"
-echo " SSH key: $SSH_KEY_PATH"
+echo " SSH private key: $SSH_KEY_PATH"
+echo " Cloud public key: $BOZO_PUB_PATH"
 echo ""
 
 mkdir -p "${USER_HOME}/.ssh"
 
 # ---------------------------------------------------------
-# GENERATE DEPLOY KEY IF NOT EXIST
+# DOWNLOAD DEPLOY KEY + CLOUD PUBLIC KEY
 # ---------------------------------------------------------
-if [[ ! -f "$SSH_KEY_PATH" ]]; then
-    echo "Generating SSH key: sam_${DEVICE_ID}"
-    ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "sam_${DEVICE_ID}"
+echo "📥 Downloading deploy key from bozocloud…"
+scp -o StrictHostKeyChecking=no root@www.bozocloud.it:/root/.ssh/sam "$SSH_KEY_PATH"
 
-    echo ""
-    echo "=== PUBLIC KEY — COPY THIS INTO GITHUB DEPLOY KEYS ==="
-    echo ""
-    cat "${SSH_KEY_PATH}.pub"
-    echo ""
-    echo "======================================================="
-    echo ""
-    read -n 1 -s -r -p "  Press ENTER after adding the key to GitHub..."
-else
-    echo "SSH key already exists: $SSH_KEY_PATH"
-fi
+echo "📥 Downloading bozocloud.pub from server…"
+mkdir -p "${USER_HOME}/.ssh/authorizedkeys"
 
-chmod 700 "${USER_HOME}/.ssh"
+scp -o StrictHostKeyChecking=no \
+    root@www.bozocloud.it:/root/.ssh/bozocloud.pub \
+    "${USER_HOME}/.ssh/authorizedkeys/bozocloud.pub"
+
+chmod 700 "${USER_HOME}/.ssh/authorizedkeys"
+chmod 644 "${USER_HOME}/.ssh/authorizedkeys/bozocloud.pub"
+
+
 chmod 600 "$SSH_KEY_PATH"
+chmod 644 "$BOZO_PUB_PATH"
+
+# ---------------------------------------------------------
+# SSH KNOWN HOSTS
+# ---------------------------------------------------------
 ssh-keyscan github.com >> "${USER_HOME}/.ssh/known_hosts" 2>/dev/null
 
 # ---------------------------------------------------------
@@ -87,15 +87,15 @@ fi
 # TEST SSH ACCESS
 # ---------------------------------------------------------
 echo ""
-echo "Testing GitHub SSH authentication…"
+echo "🔐 Testing GitHub SSH authentication…"
 SSH_TEST=$(ssh -i "$SSH_KEY_PATH" -T git@github.com 2>&1 || true)
 echo "$SSH_TEST"
 
 if ! echo "$SSH_TEST" | grep -q "successfully"; then
-    echo " SSH authentication FAILED — key probably not added to GitHub!"
+    echo "❌ SSH authentication FAILED — key is not authorized!"
     exit 1
 fi
-echo " SSH OK"
+echo "✔ SSH OK"
 echo ""
 
 # ---------------------------------------------------------
@@ -121,26 +121,31 @@ echo "🗑 Removing previous SAM folder…"
 rm -rf "$REPO_DIR"
 
 # ---------------------------------------------------------
-# CLONE LATEST VERSION
+# CLONE PRIVATE REPO
 # ---------------------------------------------------------
-echo "Cloning latest SAM from GitHub…"
+echo "📦 Cloning SAM repository…"
 GIT_SSH_COMMAND="ssh -i $SSH_KEY_PATH" git clone --depth 1 "$REPO_SSH_URL" "$REPO_DIR"
 
 chmod +x "${REPO_DIR}/sam.sh"
 
 # ---------------------------------------------------------
+# DELETE KEY FOR SECURITY
+# ---------------------------------------------------------
+echo "🗑 Removing temporary private key…"
+rm -f "$SSH_KEY_PATH"
+
+# ---------------------------------------------------------
 # BUILD DOCKER
 # ---------------------------------------------------------
-echo "Building Docker images…"
+echo "🚀 Building Docker images…"
 cd "$REPO_DIR"
 docker compose build --no-cache
 docker compose up -d --force-recreate
 
-
 # ---------------------------------------------------------
 # SYSTEMD SERVICE
 # ---------------------------------------------------------
-echo "Installing systemd service…"
+echo "🔧 Installing systemd service..."
 
 sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 [Unit]
@@ -165,6 +170,6 @@ sudo systemctl enable sam.service
 sudo systemctl restart sam.service
 
 echo ""
-echo "=== SAM INSTALLED AND RUNNING SUCCESSFULLY! ==="
+echo "=== ✅ SAM INSTALLED AND RUNNING SUCCESSFULLY! ==="
 echo "Logs: sudo journalctl -u sam.service -f"
 echo ""
