@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 echo ""
-echo "===  SAM HUB INSTALLER  ==="
+echo "===  SAM Installing  ==="
 echo ""
 
 # ---------------------------------------------------------
