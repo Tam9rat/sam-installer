@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 echo ""
-echo "===  SAM Installing  ==="
+echo "===  SAM HUB INSTALLER  ==="
 echo ""
 
 # ---------------------------------------------------------
@@ -44,7 +44,7 @@ if [[ ! -f "$SSH_KEY_PATH" ]]; then
     echo ""
     echo "======================================================="
     echo ""
-    read -rp "Add this key to GitHub → Repo → Settings → Deploy Keys. Press ENTER when done."
+    read -n 1 -s -r -p "  Press ENTER after adding the key to GitHub..."
 else
     echo "SSH key already exists: $SSH_KEY_PATH"
 fi
@@ -76,14 +76,14 @@ fi
 # ---------------------------------------------------------
 echo ""
 echo "Testing GitHub SSH authentication…"
-SSH_TEST=$(sudo -u "$RUN_USER" ssh -i "$SSH_KEY_PATH" -T git@github.com 2>&1 || true)
+SSH_TEST=$(ssh -i "$SSH_KEY_PATH" -T git@github.com 2>&1 || true)
 echo "$SSH_TEST"
 
 if ! echo "$SSH_TEST" | grep -q "successfully"; then
     echo " SSH authentication FAILED — key probably not added to GitHub!"
     exit 1
 fi
-echo "✔ SSH OK"
+echo " SSH OK"
 echo ""
 
 # ---------------------------------------------------------
