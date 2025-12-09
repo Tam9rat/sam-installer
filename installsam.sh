@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# ---------------------------------------------------------
+# PREVENT RUNNING WITH sudo
+# ---------------------------------------------------------
+if [[ "$USER" == "root" ]]; then
+    echo "❌ ERROR: Do NOT run installer with sudo!"
+    echo "   Instead run as normal user:"
+    echo "   curl -sSL https://raw.githubusercontent.com/Tam9rat/sam-installer/main/installsam.sh | bash"
+    exit 1
+fi
+
 echo ""
 echo "===  SAM HUB INSTALLER  ==="
 echo ""
@@ -18,8 +28,8 @@ fi
 echo "Detected Device ID from hostname: $DEVICE_ID"
 echo ""
 
-RUN_USER="${SUDO_USER:-$USER}"
-USER_HOME="$(eval echo ~$RUN_USER)"
+RUN_USER="$USER"
+USER_HOME="$HOME"
 SSH_KEY_PATH="${USER_HOME}/.ssh/sam_${DEVICE_ID}"
 REPO_SSH_URL="git@github.com:Tam9rat/sam.git"
 REPO_DIR="${USER_HOME}/sam"
@@ -30,12 +40,14 @@ echo " Installing to: $REPO_DIR"
 echo " SSH key: $SSH_KEY_PATH"
 echo ""
 
+mkdir -p "${USER_HOME}/.ssh"
+
 # ---------------------------------------------------------
 # GENERATE DEPLOY KEY IF NOT EXIST
 # ---------------------------------------------------------
 if [[ ! -f "$SSH_KEY_PATH" ]]; then
     echo "Generating SSH key: sam_${DEVICE_ID}"
-    sudo -u "$RUN_USER" ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "sam_${DEVICE_ID}"
+    ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "sam_${DEVICE_ID}"
 
     echo ""
     echo "=== PUBLIC KEY — COPY THIS INTO GITHUB DEPLOY KEYS ==="
@@ -49,9 +61,9 @@ else
     echo "SSH key already exists: $SSH_KEY_PATH"
 fi
 
-sudo chmod 700 "${USER_HOME}/.ssh"
-sudo chmod 600 "$SSH_KEY_PATH"
-sudo -u "$RUN_USER" ssh-keyscan github.com >> "${USER_HOME}/.ssh/known_hosts" 2>/dev/null
+chmod 700 "${USER_HOME}/.ssh"
+chmod 600 "$SSH_KEY_PATH"
+ssh-keyscan github.com >> "${USER_HOME}/.ssh/known_hosts" 2>/dev/null
 
 # ---------------------------------------------------------
 # REQUIREMENTS
@@ -106,17 +118,15 @@ clean_environment() {
 clean_environment
 
 echo "🗑 Removing previous SAM folder…"
-sudo rm -rf "$REPO_DIR"
+rm -rf "$REPO_DIR"
 
 # ---------------------------------------------------------
 # CLONE LATEST VERSION
 # ---------------------------------------------------------
 echo "Cloning latest SAM from GitHub…"
-sudo -u "$RUN_USER" GIT_SSH_COMMAND="ssh -i $SSH_KEY_PATH" \
-    git clone --depth 1 "$REPO_SSH_URL" "$REPO_DIR"
+GIT_SSH_COMMAND="ssh -i $SSH_KEY_PATH" git clone --depth 1 "$REPO_SSH_URL" "$REPO_DIR"
 
-sudo chown -R "$RUN_USER:$RUN_USER" "$REPO_DIR"
-sudo chmod +x "${REPO_DIR}/sam.sh"
+chmod +x "${REPO_DIR}/sam.sh"
 
 # ---------------------------------------------------------
 # BUILD DOCKER
