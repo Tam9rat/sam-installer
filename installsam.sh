@@ -133,7 +133,9 @@ chmod +x "${REPO_DIR}/sam.sh"
 # ---------------------------------------------------------
 echo "Building Docker images…"
 cd "$REPO_DIR"
-docker compose up -d --build --no-cache --force-recreate
+docker compose build --no-cache
+docker compose up -d --force-recreate
+
 
 # ---------------------------------------------------------
 # SYSTEMD SERVICE
